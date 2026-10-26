@@ -2,6 +2,7 @@ import asyncio
 import html
 import logging
 import os  # Додано для роботи зі змінними середовища
+from aiohttp import web
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command
@@ -148,11 +149,25 @@ async def finish_report(message: types.Message, state: FSMContext):
     await state.clear()
 
 # --- ЗАПУСК ---
+async def health_check(_request: web.Request) -> web.Response:
+    return web.Response(text="Bot is running")
+
+
 async def main():
-    print("Бот запущено в робочому режимі!")
-    # Цей рядок допомагає уникнути помилок, якщо бот перезавантажиться
-    await bot.delete_webhook(drop_pending_updates=True) 
-    await dp.start_polling(bot)
+    app = web.Application()
+    app.router.add_get("/", health_check)
+    app.router.add_get("/health", health_check)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", int(os.getenv("PORT", "10000")))
+
+    try:
+        await site.start()
+        logging.info("Health server started on port %s", os.getenv("PORT", "10000"))
+        await bot.delete_webhook(drop_pending_updates=True)
+        await dp.start_polling(bot)
+    finally:
+        await runner.cleanup()
 
 if __name__ == "__main__":
     asyncio.run(main())
